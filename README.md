@@ -292,7 +292,15 @@ src/dd_agent/
 tests/                            160 tests
 .github/workflows/monitor.yml     10分ごとの定期実行
 .github/workflows/test.yml        テスト CI
+
+AGENTS.md                         開発者・コーディングエージェント向け指示書
+CLAUDE.md                         Claude Code 固有の注意（AGENTS.md を読み込む）
+.claude/skills/dd-agent-source-repair/
+                                  ソース修復・監視対象追加の手順スキル
 ```
+
+コードを変更する場合は [AGENTS.md](AGENTS.md) を先に読んでください。「変えては
+いけない不変条件」（一見冗長だが意図的な処理とその理由）をまとめています。
 
 ### 監視対象を追加する
 
