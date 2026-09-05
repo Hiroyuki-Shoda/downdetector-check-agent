@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dd-agent"
+version = "0.1.0"
+description = "Downdetector と公式ステータスページを監視し、障害を要約して Slack に通知するエージェント"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    # Impersonates a real Chrome TLS/HTTP2 handshake. Without it Cloudflare
+    # is very likely to challenge the Downdetector requests.
+    "curl_cffi>=0.7",
+    # Used for the Japanese incident summaries. The agent degrades to a
+    # template summary if it is missing or unauthenticated.
+    "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+dd-agent = "dd_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

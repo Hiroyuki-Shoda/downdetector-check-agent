@@ -1,0 +1,159 @@
+# dd-agent 監視対象サービス定義
+#
+# ⚠️ 検証状況について
+# このファイルの URL は公開ドキュメント/実例調査にもとづいて記載していますが、
+# 作成環境から外部ネットワークに接続できなかったため、実際のレスポンスは
+# 未検証です。初回セットアップ時に必ず次を実行して確認してください:
+#
+#     dd-agent diagnose
+#
+# 各エントリの `# verified:` コメントは調査時点の裏付けの強さを示します。
+#   confirmed = 実在する URL を実例から確認済み（レスポンス内容は未検証）
+#   inferred  = 命名規則と .com 側の実例から推定
+#   guess     = 裏付けなし。存在しない可能性あり
+#
+# Downdetector の URL は https://downdetector.jp/shougai/<slug>/ 形式です。
+# slug が違うと 404 になり、そのサービスは Downdetector 判定が使えません
+# （公式ステータス側だけで動作は継続します）。
+
+# Downdetector の報告数スコアリング既定値。
+# min_reports が最重要: 報告数がこの値を超えるまで倍率は信用しません。
+# （平常時 1件 → 4件でも 4倍になってしまうため）
+defaults:
+  min_reports: 20
+  warning_ratio: 2.5   # 平常時比 2.5 倍以上 → 障害の兆候
+  outage_ratio: 5.0    # 平常時比 5.0 倍以上 → 障害
+  baseline_floor: 1.0
+
+notify:
+  level: WARNING       # WARNING = 兆候から通知 / OUTAGE = 確定障害のみ
+  reminder_hours: 6    # 継続中の障害を再通知する間隔
+  recovery: true       # 復旧時に通知するか
+
+summary:
+  enabled: true
+  model: claude-opus-5
+
+request_timeout: 20
+downdetector_delay: 2  # Downdetector への連続アクセス間隔（秒）
+
+services:
+  # ── SNS ────────────────────────────────────────────────────────────────
+  - key: x
+    name: X (Twitter)
+    # verified: confirmed — Downdetector は今も slug に `twitter` を使用（`x` ではない）
+    downdetector_url: https://downdetector.jp/shougai/twitter/
+    official:
+      # X には機械可読な公式ステータスがない（旧 api.twitterstat.us は停止済み）。
+      # そのため X は Downdetector が唯一の検知手段になります。
+      kind: none
+      url: https://docs.x.com/status
+
+  # ── AI ─────────────────────────────────────────────────────────────────
+  - key: chatgpt
+    name: ChatGPT
+    # verified: inferred — Downdetector の slug は `openai`（`chatgpt` は存在しない）
+    downdetector_url: https://downdetector.jp/shougai/openai/
+    official:
+      kind: statuspage
+      base: https://status.openai.com
+      url: https://status.openai.com/
+
+  - key: claude
+    name: Claude
+    # verified: inferred — slug は `claude-ai`（`claude` ではない）
+    downdetector_url: https://downdetector.jp/shougai/claude-ai/
+    official:
+      # status.anthropic.com は status.claude.com に改称済み（同一 Statuspage）
+      kind: statuspage
+      base: https://status.claude.com
+      url: https://status.claude.com/
+
+  - key: gemini
+    name: Google Gemini
+    # verified: inferred — slug は `googlegemini`（ハイフンなし）
+    downdetector_url: https://downdetector.jp/shougai/googlegemini/
+    official:
+      # Gemini は Workspace ダッシュボードと Google Cloud の両方に出ることがある。
+      # ここでは Cloud 側（AI Studio / API 障害が出る）を見る。
+      # ⚠️ この JSON パスは未検証。diagnose で確認してください。
+      kind: google
+      api: https://status.cloud.google.com/incidents.json
+      url: https://status.cloud.google.com/
+      products:
+        - gemini
+        - vertex ai
+        - ai studio
+        - generative
+
+  # ── Google ─────────────────────────────────────────────────────────────
+  - key: gmail
+    name: Gmail
+    # verified: confirmed（2016年の .jp トップページ HTML に掲載）
+    downdetector_url: https://downdetector.jp/shougai/gmail/
+    official:
+      # ⚠️ Workspace ダッシュボードの JSON パスは未検証。
+      # 取得できない場合は kind: feed に切り替え、ダッシュボード下部の
+      # RSS Feed リンク（Google 公式が障害通知用に推奨）を api に指定してください。
+      kind: google
+      api: https://www.google.com/appsstatus/dashboard/incidents.json
+      url: https://www.google.com/appsstatus/dashboard/
+      products:
+        - gmail
+
+  # ── クラウド / SaaS ─────────────────────────────────────────────────────
+  - key: aws
+    name: AWS
+    # verified: inferred
+    downdetector_url: https://downdetector.jp/shougai/aws-amazon-web-services/
+    official:
+      # ⚠️ AWS には公式にドキュメント化された JSON がありません。
+      # data.json は非公式（ただし長年稼働）。順に試して最初に成功したものを使います。
+      # 正式な手段は AWS Health API（Business/Enterprise Support 必須）か EventBridge。
+      kind: aws
+      apis:
+        - https://status.aws.amazon.com/data.json
+        - https://health.aws.amazon.com/health/status
+      url: https://health.aws.amazon.com/health/status
+      regions:
+        - ap-northeast-1
+        - tokyo
+        - global
+
+  - key: slack
+    name: Slack
+    # verified: inferred
+    downdetector_url: https://downdetector.jp/shougai/slack/
+    official:
+      # Statuspage ではない独自スキーマ。v2.0.0 の指定が必須
+      # （省略すると v1.0.0 になりインシデントが1件しか返らない）
+      kind: slack
+      api: https://slack-status.com/api/v2.0.0/current
+      url: https://status.slack.com/
+
+  - key: backlog
+    name: Backlog
+    # verified: guess — Downdetector が Backlog を扱っていない可能性があります。
+    # diagnose が 404 を返す場合はこの行を削除してください（公式ステータスのみで動作します）。
+    downdetector_url: https://downdetector.jp/shougai/backlog/
+    official:
+      # Nulab は Atlassian Statuspage ではなく Statuspal を利用
+      kind: statuspal
+      api: https://statuspal.io/api/v2/status_pages/nulab
+      url: https://status.nulab.com/
+      services:
+        - backlog
+
+  - key: salesforce
+    name: Salesforce
+    # verified: guess — Downdetector に存在しない可能性があります。
+    # diagnose が 404 を返す場合はこの行を削除してください。
+    downdetector_url: https://downdetector.jp/shougai/salesforce/
+    official:
+      kind: salesforce
+      api: https://api.status.salesforce.com/v1/instances/status
+      url: https://status.salesforce.com/
+      # ⚠️ 自社が使っているインスタンス（例: AP15, NA224）を必ず指定してください。
+      # 空のままだと数百インスタンスのどこかで常に何か起きているため
+      # 通知がノイズになります。確認方法: Salesforce で [設定] → [会社の情報]
+      instances: []

@@ -1,0 +1,88 @@
+name: Downdetector monitor
+
+on:
+  schedule:
+    # 10分ごと。GitHub Actions の cron は混雑時に数分遅延することがあります。
+    # ⚠️ schedule はデフォルトブランチのワークフローしか実行されません。
+    #    このブランチをマージするまで定期実行は始まりません。
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Slack に通知せず結果だけ表示する"
+        type: boolean
+        default: false
+      force:
+        description: "重複除去を無視して通知する（配線確認用）"
+        type: boolean
+        default: false
+      only:
+        description: "特定サービスのみ確認 (例: chatgpt)"
+        type: string
+        default: ""
+
+# 状態ファイルを2つの実行が同時に書き換えないようにする。
+# cancel-in-progress は false: 実行中のチェックを止めると通知が失われる。
+concurrency:
+  group: downdetector-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      # 通知済みフラグを実行間で引き継ぐ。これが無いと10分ごとに
+      # 同じ障害を通知し続けます。
+      # キーに run_id を含め restore-keys で前回分を復元する
+      # 「ローリングキャッシュ」方式（キャッシュは上書きできないため）。
+      - name: Restore notification state
+        id: state-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .dd-agent-state.json
+          key: dd-agent-state-${{ github.run_id }}
+          restore-keys: |
+            dd-agent-state-
+
+      - name: Check services
+        id: check
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 入力は必ず env 経由で渡す。run: に ${{ }} を直接展開すると
+          # 入力値がシェルとして評価されてしまう（スクリプトインジェクション）。
+          DRY_RUN: ${{ inputs.dry_run }}
+          FORCE: ${{ inputs.force }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -euo pipefail
+          args=(check --github-summary)
+          # `[ ... ] && args+=(...)` は条件が偽のとき終了ステータス1になり
+          # set -e でステップ全体が落ちるため、if で書く。
+          if [ "${DRY_RUN:-false}" = "true" ]; then args+=(--dry-run); fi
+          if [ "${FORCE:-false}" = "true" ]; then args+=(--force); fi
+          if [ -n "${ONLY:-}" ]; then args+=(--only "$ONLY"); fi
+          dd-agent "${args[@]}"
+
+      # 通知が失敗した場合でも状態は保存する（失敗したサービスの状態は
+      # runner 側で意図的に更新されないため、次回リトライされます）。
+      - name: Save notification state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .dd-agent-state.json
+          key: dd-agent-state-${{ github.run_id }}

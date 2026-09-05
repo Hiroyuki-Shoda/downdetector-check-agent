@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# 通知済みフラグ（実行環境ごとのローカル状態）
+.dd-agent-state.json
